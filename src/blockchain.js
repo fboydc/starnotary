@@ -67,17 +67,25 @@ class Blockchain {
     _addBlock(block) {
         let self = this;
         return new Promise(async (resolve, reject) => {
-            this.getBlockByHeight(self.height).then((lastBlock)=>{
+
+            this.getBlockByHeight(self.height).then(async (lastBlock)=>{
+
                 if(lastBlock)
                     block.previousBlockHash = lastBlock.hash;    
                 block.height = self.height + 1;
                 block.time = parseInt(new Date().getTime().toString().slice(0, -3));
                 block.hash = SHA256(JSON.stringify(self)).toString();
+                console.log("before validating chain", block);
+                const errors = await self.validateChain();
+
+                if(errors.length)
+                    reject(errors);
+
                 self.chain.push(block); 
                 self.height = self.height + 1;
                 resolve(block);
             }, reason=>{
-                reject(reason);
+                reject(new Error("could not get height"));
             });
            
         });
@@ -116,6 +124,7 @@ class Blockchain {
      */
     submitStar(address, message, signature, star) {
         let self = this;
+
         return new Promise(async (resolve, reject) => {
             let time = parseInt(message.split(':')[1]);
             let currentTime = parseInt(new Date().getTime().toString().slice(0, -3));
@@ -125,15 +134,10 @@ class Blockchain {
                 if(bitcoinMessage.verify(message, address, signature))
                 {
                     let block = new BlockClass.Block({address, star});
-                    let valid = await self.validateChain();
-                    if(valid.length === 0)
-                    {
-                        this._addBlock(block).then((newBlock)=>{
-                            resolve(newBlock);
-                        });
-                    } else{
-                        reject(new Error("Chain is invalid"));
-                    }
+                    self._addBlock(block).then((newBlock)=>{
+                        resolve(newBlock);
+                    });
+                    
                        
                 } else {
                     reject(new Error("Message + signature combination is not valid. Please check your request body and try again."));
@@ -229,8 +233,6 @@ class Blockchain {
             });
 
             resolve(errorLog);
-
-            
         });
     }
 
